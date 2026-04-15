@@ -1,6 +1,10 @@
 #!/bin/bash
 # 一键部署 node_exporter + 端口带宽采集脚本
-# 用法: bash deploy_monitor.sh
+# 自动修复 Windows 换行符
+if grep -qP '\r$' "$0" 2>/dev/null; then
+  sed -i 's/\r$//' "$0"
+  exec bash "$0" "$@"
+fi
 
 NODE_EXPORTER_VERSION="1.8.2"
 
