@@ -45,7 +45,8 @@ case "$ACTION" in
     fi
 
     # 在对应 job 的 targets 下添加
-    sed -i "/job_name: '$JOB_NAME'/,/job_name:/{/targets:/a\\        - '$TARGET'" "$CONFIG"
+    sed -i "/job_name: '$JOB_NAME'/,/targets:/{/targets:/a\\        - '$TARGET'
+}" "$CONFIG"
     echo "✔ 已添加 $TARGET 到 $JOB_NAME"
     reload_prometheus
     ;;
@@ -65,6 +66,10 @@ case "$ACTION" in
     sed -i "/$TARGET/d" "$CONFIG"
     echo "✔ 已删除 $TARGET"
     reload_prometheus
+    # 清理该 target 的历史数据
+    curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/delete_series -d "match[]={instance=\"$TARGET\"}" > /dev/null
+    curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/clean_tombstones > /dev/null
+    echo "✔ 已清理 $TARGET 历史数据"
     ;;
 
   list)
