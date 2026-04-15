@@ -126,8 +126,8 @@ prom_target.sh 脚本内容：
 ```bash
 #!/bin/bash
 # Prometheus target 管理脚本
-# 自动修复 Windows 换行符
-if grep -qP '\r$' "$0" 2>/dev/null; then
+# 自动修复 Windows 换行符（仅文件方式执行时）
+if [ -f "$0" ] && grep -qP '\r$' "$0" 2>/dev/null; then
   sed -i 's/\r$//' "$0"
   exec bash "$0" "$@"
 fi
@@ -226,8 +226,8 @@ bash <(curl -Ls https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/dep
 ```bash
 #!/bin/bash
 # 一键部署 node_exporter + 端口带宽采集脚本
-# 自动修复 Windows 换行符
-if grep -qP '\r$' "$0" 2>/dev/null; then
+# 自动修复 Windows 换行符（仅文件方式执行时）
+if [ -f "$0" ] && grep -qP '\r$' "$0" 2>/dev/null; then
   sed -i 's/\r$//' "$0"
   exec bash "$0" "$@"
 fi
