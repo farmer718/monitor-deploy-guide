@@ -25,13 +25,14 @@ services:
     container_name: prometheus
     restart: always
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./:/etc/prometheus/
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=30d"
       - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
     ports:
       - "9090:9090"
     networks:
@@ -67,14 +68,14 @@ scrape_configs:
   - job_name: 'relay-servers'
     static_configs:
       - targets:
-        - '中转1IP:9100'
-        - '中转2IP:9100'
+        - '中转1IP:59999'
+        - '中转2IP:59999'
 
   - job_name: 'landing-servers'
     static_configs:
       - targets:
-        - '落地1IP:9100'
-        - '落地2IP:9100'
+        - '落地1IP:59999'
+        - '落地2IP:59999'
 ```
 
 把 IP 换成实际服务器地址。
@@ -163,7 +164,8 @@ case "$ACTION" in
       exit 0
     fi
 
-    sed -i "/job_name: '$JOB_NAME'/,/job_name:/{/targets:/a\\        - '$TARGET'" "$CONFIG"
+    sed -i "/job_name: '$JOB_NAME'/,/targets:/{/targets:/a\\        - '$TARGET'
+}" "$CONFIG"
     echo "✔ 已添加 $TARGET 到 $JOB_NAME"
     reload_prometheus
     ;;
@@ -183,11 +185,19 @@ case "$ACTION" in
     sed -i "/$TARGET/d" "$CONFIG"
     echo "✔ 已删除 $TARGET"
     reload_prometheus
+    # 清理该 target 的历史数据
+    curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/delete_series -d "match[]={instance=\"$TARGET\"}" > /dev/null
+    curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/clean_tombstones > /dev/null
+    echo "✔ 已清理 $TARGET 历史数据"
     ;;
 
   list)
     echo "===== 当前 targets ====="
     grep -E "^\s+- '" "$CONFIG" | sed "s/^[[:space:]]*- '//;s/'$//"
+    ;;
+
+  reload)
+    reload_prometheus
     ;;
 
   *)
@@ -196,6 +206,7 @@ case "$ACTION" in
     echo "  $0 add landing <IP:端口>   添加落地服务器"
     echo "  $0 del <IP:端口>           删除服务器"
     echo "  $0 list                    查看所有服务器"
+    echo "  $0 reload                  重载 Prometheus"
     ;;
 esac
 ```
@@ -246,32 +257,42 @@ else
 fi
 
 # ========== 交互输入 ==========
-read -p "请输入 node_exporter 监听端口 [默认 59999]: " input_port
+read -p "请输入 node_exporter 监听端口 [默认 59999]: " input_port < /dev/tty
 NODE_EXPORTER_PORT=${input_port:-59999}
 
-read -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min
+read -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min < /dev/tty
 PORT_MIN=${input_min:-10000}
 
-read -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max
+read -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max < /dev/tty
 PORT_MAX=${input_max:-63355}
 
 echo ""
 echo "确认配置："
 echo "  node_exporter 端口: ${NODE_EXPORTER_PORT}"
 echo "  监控端口范围: ${PORT_MIN} - ${PORT_MAX}"
-read -p "是否继续？[Y/n]: " confirm
+read -p "是否继续？[Y/n]: " confirm < /dev/tty
 if [[ "$confirm" =~ ^[nN] ]]; then
   echo "已取消"
   exit 0
 fi
 echo ""
 
+# ========== 0. 检查依赖 ==========
+if ! command -v iptables &>/dev/null; then
+  echo ">>> 0. 安装 iptables"
+  apt install -y iptables 2>/dev/null || yum install -y iptables 2>/dev/null
+fi
+
 # ========== 1. 安装 node_exporter ==========
 echo ">>> 1. 安装 node_exporter"
 cd /tmp
 FILENAME="node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
 if [ ! -f "$FILENAME" ]; then
-  wget -q "$DOWNLOAD_URL" -O "$FILENAME"
+  if command -v wget &>/dev/null; then
+    wget -q "$DOWNLOAD_URL" -O "$FILENAME"
+  else
+    curl -Ls "$DOWNLOAD_URL" -o "$FILENAME"
+  fi
 fi
 tar xzf "$FILENAME"
 cp node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
@@ -322,6 +343,7 @@ echo ">>> 3. 部署采集脚本"
 mkdir -p /opt/scripts
 cat > /opt/scripts/port_traffic.sh << SCRIPT
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PORT_MIN=${PORT_MIN}
 PORT_MAX=${PORT_MAX}
 OUTPUT="/var/lib/node_exporter/textfile/port_traffic.prom"
