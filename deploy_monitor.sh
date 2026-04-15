@@ -20,32 +20,42 @@ else
 fi
 
 # ========== 交互输入 ==========
-read -p "请输入 node_exporter 监听端口 [默认 59999]: " input_port
+read -p "请输入 node_exporter 监听端口 [默认 59999]: " input_port < /dev/tty
 NODE_EXPORTER_PORT=${input_port:-59999}
 
-read -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min
+read -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min < /dev/tty
 PORT_MIN=${input_min:-10000}
 
-read -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max
+read -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max < /dev/tty
 PORT_MAX=${input_max:-63355}
 
 echo ""
 echo "确认配置："
 echo "  node_exporter 端口: ${NODE_EXPORTER_PORT}"
 echo "  监控端口范围: ${PORT_MIN} - ${PORT_MAX}"
-read -p "是否继续？[Y/n]: " confirm
+read -p "是否继续？[Y/n]: " confirm < /dev/tty
 if [[ "$confirm" =~ ^[nN] ]]; then
   echo "已取消"
   exit 0
 fi
 echo ""
 
+# ========== 0. 检查依赖 ==========
+if ! command -v iptables &>/dev/null; then
+  echo ">>> 0. 安装 iptables"
+  apt install -y iptables 2>/dev/null || yum install -y iptables 2>/dev/null
+fi
+
 # ========== 1. 安装 node_exporter ==========
 echo ">>> 1. 安装 node_exporter"
 cd /tmp
 FILENAME="node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
 if [ ! -f "$FILENAME" ]; then
-  wget -q "$DOWNLOAD_URL" -O "$FILENAME"
+  if command -v wget &>/dev/null; then
+    wget -q "$DOWNLOAD_URL" -O "$FILENAME"
+  else
+    curl -Ls "$DOWNLOAD_URL" -o "$FILENAME"
+  fi
 fi
 tar xzf "$FILENAME"
 cp node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
@@ -96,6 +106,7 @@ echo ">>> 3. 部署采集脚本"
 mkdir -p /opt/scripts
 cat > /opt/scripts/port_traffic.sh << SCRIPT
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PORT_MIN=${PORT_MIN}
 PORT_MAX=${PORT_MAX}
 OUTPUT="/var/lib/node_exporter/textfile/port_traffic.prom"
