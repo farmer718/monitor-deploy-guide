@@ -101,12 +101,103 @@ curl http://localhost:3000/api/health
 4. 选 Prometheus，URL 填 http://prometheus:9090
 5. 点 保存并测试，显示绿色就 OK
 
-### 7. 后续加服务器
+### 7. 后续管理服务器
 
-编辑 prometheus.yml 加 target，然后热重载：
+将 prom_target.sh 放到 /server/monitor/ 目录下，用命令管理 target：
 
 ```bash
-curl -X POST http://localhost:9090/-/reload
+# 添加中转服务器
+bash prom_target.sh add relay 1.2.3.4:59999
+
+# 添加落地服务器
+bash prom_target.sh add landing 5.6.7.8:59999
+
+# 删除服务器
+bash prom_target.sh del 1.2.3.4:59999
+
+# 查看所有服务器
+bash prom_target.sh list
+```
+
+添加和删除后会自动热重载 Prometheus，不用手动操作。
+
+prom_target.sh 脚本内容：
+
+```bash
+#!/bin/bash
+# Prometheus target 管理脚本
+# 自动修复 Windows 换行符
+if grep -qP '\r$' "$0" 2>/dev/null; then
+  sed -i 's/\r$//' "$0"
+  exec bash "$0" "$@"
+fi
+CONFIG="/server/monitor/prometheus.yml"
+ACTION=$1
+
+reload_prometheus() {
+  curl -s -X POST http://localhost:9090/-/reload > /dev/null
+  echo "✔ Prometheus 已重载"
+}
+
+case "$ACTION" in
+  add)
+    JOB=$2    # relay 或 landing
+    TARGET=$3 # IP:端口
+
+    if [ -z "$JOB" ] || [ -z "$TARGET" ]; then
+      echo "用法: $0 add <relay|landing> <IP:端口>"
+      exit 1
+    fi
+
+    if [ "$JOB" = "relay" ]; then
+      JOB_NAME="relay-servers"
+    elif [ "$JOB" = "landing" ]; then
+      JOB_NAME="landing-servers"
+    else
+      echo "类型只能是 relay 或 landing"
+      exit 1
+    fi
+
+    if grep -q "$TARGET" "$CONFIG"; then
+      echo "⚠ $TARGET 已存在，跳过"
+      exit 0
+    fi
+
+    sed -i "/job_name: '$JOB_NAME'/,/job_name:/{/targets:/a\\        - '$TARGET'" "$CONFIG"
+    echo "✔ 已添加 $TARGET 到 $JOB_NAME"
+    reload_prometheus
+    ;;
+
+  del)
+    TARGET=$2
+    if [ -z "$TARGET" ]; then
+      echo "用法: $0 del <IP:端口>"
+      exit 1
+    fi
+
+    if ! grep -q "$TARGET" "$CONFIG"; then
+      echo "⚠ $TARGET 不存在"
+      exit 0
+    fi
+
+    sed -i "/$TARGET/d" "$CONFIG"
+    echo "✔ 已删除 $TARGET"
+    reload_prometheus
+    ;;
+
+  list)
+    echo "===== 当前 targets ====="
+    grep -E "^\s+- '" "$CONFIG" | sed "s/^[[:space:]]*- '//;s/'$//"
+    ;;
+
+  *)
+    echo "用法:"
+    echo "  $0 add relay <IP:端口>     添加中转服务器"
+    echo "  $0 add landing <IP:端口>   添加落地服务器"
+    echo "  $0 del <IP:端口>           删除服务器"
+    echo "  $0 list                    查看所有服务器"
+    ;;
+esac
 ```
 
 ---
@@ -135,7 +226,11 @@ bash <(curl -Ls https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/dep
 ```bash
 #!/bin/bash
 # 一键部署 node_exporter + 端口带宽采集脚本
-# 用法: bash deploy_monitor.sh
+# 自动修复 Windows 换行符
+if grep -qP '\r$' "$0" 2>/dev/null; then
+  sed -i 's/\r$//' "$0"
+  exec bash "$0" "$@"
+fi
 
 NODE_EXPORTER_VERSION="1.8.2"
 
