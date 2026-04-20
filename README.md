@@ -222,6 +222,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/farmer718/monitor-deploy-guide
 ```bash
 bash <(curl -Ls https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/deploy_monitor.sh)
 ```
+
 ### 2. 一键部署脚本 deploy_monitor.sh
 
 将以下脚本保存为 `deploy_monitor.sh`，传到目标服务器上执行即可。
@@ -244,16 +245,16 @@ else
     DOWNLOAD_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
 fi
 
-# ========== 交互输入 (支持批量脚本静默跳过) ==========
-read -t 10 -p "请输入 node_exporter 监听端口 [默认 59999 (10秒自动跳过)]: " input_port < /dev/tty 2>/dev/null
+# ========== 交互输入 ==========
+read -t 15 -p "请输入 node_exporter 监听端口 [默认 59999 (15秒跳过)]: " input_port
 echo ""
 NODE_EXPORTER_PORT=${input_port:-59999}
 
-read -t 10 -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min < /dev/tty 2>/dev/null
+read -t 15 -p "请输入带宽监控起始端口 [默认 10000 (15秒跳过)]: " input_min
 echo ""
 PORT_MIN=${input_min:-10000}
 
-read -t 10 -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max < /dev/tty 2>/dev/null
+read -t 15 -p "请输入带宽监控结束端口 [默认 63355 (15秒跳过)]: " input_max
 echo ""
 PORT_MAX=${input_max:-63355}
 
@@ -388,15 +389,20 @@ echo "========================================="
 ```
 
 ### 3. 为端口绑定主播名称
+
 在目标服务器上编辑配置文件：
+
 ```bash
 vi /opt/scripts/user_map.txt
 ```
+
 按 `端口号 主播名称` 的格式填入并保存，例如：
+
 ```text
 10001 虚拟主播-七七
 10002 游戏主播-张三
 ```
+
 保存后即刻生效，无需重启服务。
 
 ---
