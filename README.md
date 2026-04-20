@@ -212,14 +212,14 @@ esac
 ### 1. 一键安装命令
 
 国外服务器：
-` ` `bash
-bash <(curl -Ls https://raw.githubusercontent.com/farmer718/monitor-deploy-guide/main/deploy_monitor.sh)
-` ` `
+```bash
+bash <(curl -Ls [https://raw.githubusercontent.com/farmer718/monitor-deploy-guide/main/deploy_monitor.sh](https://raw.githubusercontent.com/farmer718/monitor-deploy-guide/main/deploy_monitor.sh))
+```
 
 国内服务器：
-` ` `bash
-bash <(curl -Ls https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/deploy_monitor.sh)
-` ` `
+```bash
+bash <(curl -Ls [https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/deploy_monitor.sh](https://gitee.com/therfarmer/monitor-deploy-guide/raw/master/deploy_monitor.sh))
+```
 ### 2. 一键部署脚本 deploy_monitor.sh
 
 将以下脚本保存为 `deploy_monitor.sh`，传到目标服务器上执行即可。
