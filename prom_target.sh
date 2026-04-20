@@ -1,15 +1,6 @@
 #!/bin/bash
-# Prometheus target 管理脚本
-# 自动修复 Windows 换行符（仅文件方式执行时）
-if [ -f "$0" ] && grep -qP '\r$' "$0" 2>/dev/null; then
-  sed -i 's/\r$//' "$0"
-  exec bash "$0" "$@"
-fi
-# 用法:
-#   bash prom_target.sh add relay 1.2.3.4:59999
-#   bash prom_target.sh add landing 5.6.7.8:59999
-#   bash prom_target.sh del 1.2.3.4:59999
-#   bash prom_target.sh list
+# Prometheus target 管理脚本 (V4 修复版 - 使用 awk 保证绝对稳定)
+if [ -f "$0" ] && grep -qP '\r$' "$0" 2>/dev/null; then sed -i 's/\r$//' "$0"; exec bash "$0" "$@"; fi
 
 CONFIG="/server/monitor/prometheus.yml"
 ACTION=$1
@@ -21,11 +12,9 @@ reload_prometheus() {
 
 case "$ACTION" in
   add)
-    JOB=$2    # relay 或 landing
-    TARGET=$3 # IP:端口
-
-    if [ -z "$JOB" ] || [ -z "$TARGET" ]; then
-      echo "用法: $0 add <relay|landing> <IP:端口>"
+    JOB=$2; TARGET=$3; ALIAS=$4
+    if [ -z "$JOB" ] || [ -z "$TARGET" ] || [ -z "$ALIAS" ]; then
+      echo "用法: $0 add <relay|landing> <IP:端口> <服务器别名>"
       exit 1
     fi
 
@@ -38,43 +27,50 @@ case "$ACTION" in
       exit 1
     fi
 
-    # 检查是否已存在
-    if grep -q "$TARGET" "$CONFIG"; then
-      echo "⚠ $TARGET 已存在，跳过"
-      exit 0
-    fi
+    if grep -q "$TARGET" "$CONFIG"; then echo "⚠ $TARGET 已存在，跳过"; exit 0; fi
 
-    # 在对应 job 的 targets 下添加
-    sed -i "/job_name: '$JOB_NAME'/,/targets:/{/targets:/a\\        - '$TARGET'
-}" "$CONFIG"
-    echo "✔ 已添加 $TARGET 到 $JOB_NAME"
+    # 核心修复：使用更稳健的 awk 进行多行插入
+    awk -v job="job_name: '$JOB_NAME'" \
+        -v tgt="      - targets: ['$TARGET']" \
+        -v lab="        labels:" \
+        -v ali="          alias: '$ALIAS'" '
+    $0 ~ job {in_job=1}
+    in_job==1 && $0 ~ /static_configs:/ {
+        print $0
+        print tgt
+        print lab
+        print ali
+        in_job=0
+        next
+    }
+    {print $0}' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
+
+    echo "✔ 已添加 $TARGET ($ALIAS) 到 $JOB_NAME"
     reload_prometheus
     ;;
 
   del)
     TARGET=$2
-    if [ -z "$TARGET" ]; then
-      echo "用法: $0 del <IP:端口>"
-      exit 1
-    fi
+    if [ -z "$TARGET" ]; then echo "用法: $0 del <IP:端口>"; exit 1; fi
+    if ! grep -q "$TARGET" "$CONFIG"; then echo "⚠ $TARGET 不存在"; exit 0; fi
 
-    if ! grep -q "$TARGET" "$CONFIG"; then
-      echo "⚠ $TARGET 不存在"
-      exit 0
-    fi
+    # 修复：连同关联的 alias 一起安全删除
+    awk -v tgt="$TARGET" '
+    $0 ~ tgt {skip=2; next}
+    skip > 0 {skip--; next}
+    {print $0}' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
 
-    sed -i "/$TARGET/d" "$CONFIG"
-    echo "✔ 已删除 $TARGET"
+    echo "✔ 已删除 $TARGET 及关联别名"
     reload_prometheus
-    # 清理该 target 的历史数据
+
     curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/delete_series -d "match[]={instance=\"$TARGET\"}" > /dev/null
     curl -s -X POST http://localhost:9090/api/v1/admin/tsdb/clean_tombstones > /dev/null
     echo "✔ 已清理 $TARGET 历史数据"
     ;;
 
   list)
-    echo "===== 当前 targets ====="
-    grep -E "^\s+- '" "$CONFIG" | sed "s/^[[:space:]]*- '//;s/'$//"
+    echo "===== 当前 targets (IP | 别名) ====="
+    grep -E "targets:|alias:" "$CONFIG" | sed "s/^[[:space:]]*- targets: \['//;s/'\]//;s/^[[:space:]]*alias: '//;s/'//" | awk 'NR%2{printf "%s | ",$0} !NR%2'
     ;;
 
   reload)
@@ -82,13 +78,6 @@ case "$ACTION" in
     ;;
 
   *)
-    echo "Prometheus target 管理脚本"
-    echo ""
-    echo "用法:"
-    echo "  $0 add relay <IP:端口>     添加中转服务器"
-    echo "  $0 add landing <IP:端口>   添加落地服务器"
-    echo "  $0 del <IP:端口>           删除服务器"
-    echo "  $0 list                    查看所有服务器"
-    echo "  $0 reload                  重载 Prometheus"
+    echo "用法: $0 <add|del|list|reload> ..."
     ;;
 esac
