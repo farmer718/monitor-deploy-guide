@@ -1,5 +1,5 @@
 #!/bin/bash
-# 一键部署 node_exporter + 端口带宽采集脚本 (支持主播别名 - 高可用加强版)
+# 一键部署 node_exporter + 端口带宽采集脚本 (V4.3 终极版 - 主播名在前端口在后)
 if [ -f "$0" ] && grep -qP '\r$' "$0" 2>/dev/null; then sed -i 's/\r$//' "$0"; exec bash "$0" "$@"; fi
 
 NODE_EXPORTER_VERSION="1.8.2"
@@ -15,7 +15,6 @@ else
 fi
 
 # ========== 交互输入 (支持批量脚本静默跳过) ==========
-# 加入了 -t 10 (10秒超时) 和 2>/dev/null，防止批量通过 ssh 执行时卡死挂起
 read -t 10 -p "请输入 node_exporter 监听端口 [默认 59999 (10秒自动跳过)]: " input_port < /dev/tty 2>/dev/null
 echo ""
 NODE_EXPORTER_PORT=${input_port:-59999}
@@ -123,11 +122,11 @@ for port in \$PORTS; do
 
   in_bytes=\$(iptables -L PORT_MONITOR_IN -vnx | awk -v p="dpt:\$port" '\$0 ~ p {print \$2}')
   out_bytes=\$(iptables -L PORT_MONITOR_OUT -vnx | awk -v p="spt:\$port" '\$0 ~ p {print \$2}')
-
-  # === 核心防雷点：读取并清洗主播名字，去除潜在的 Windows 换行符 \r ===
-  USER_NAME=\$(awk -v p="\$port" '\$1==p {sub(/\\r\$/,"",\$2); print \$2}' /opt/scripts/user_map.txt 2>/dev/null)
-  USER_NAME=\${USER_NAME:-"未分配-\$port"}
-
+  
+  # === 提取别名，拼接为 [别名-端口] 格式 ===
+  ALIAS_NAME=\$(awk -v p="\$port" '\$1==p {sub(/\\r\$/,"",\$2); print \$2}' /opt/scripts/user_map.txt 2>/dev/null)
+  USER_NAME="\${ALIAS_NAME:-未分配}-\$port"
+  
   echo "port_traffic_in_bytes{port=\"\$port\",user=\"\$USER_NAME\"} \${in_bytes:-0}" >> "\$TMP"
   echo "port_traffic_out_bytes{port=\"\$port\",user=\"\$USER_NAME\"} \${out_bytes:-0}" >> "\$TMP"
 done
