@@ -14,16 +14,16 @@ else
     DOWNLOAD_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
 fi
 
-# ========== 交互输入 (支持批量脚本静默跳过) ==========
-read -t 10 -p "请输入 node_exporter 监听端口 [默认 59999 (10秒自动跳过)]: " input_port < /dev/tty 2>/dev/null
+# ========== 交互输入 ==========
+read -t 15 -p "请输入 node_exporter 监听端口 [默认 59999 (15秒跳过)]: " input_port
 echo ""
 NODE_EXPORTER_PORT=${input_port:-59999}
 
-read -t 10 -p "请输入带宽监控端口范围起始 [默认 10000]: " input_min < /dev/tty 2>/dev/null
+read -t 15 -p "请输入带宽监控起始端口 [默认 10000 (15秒跳过)]: " input_min
 echo ""
 PORT_MIN=${input_min:-10000}
 
-read -t 10 -p "请输入带宽监控端口范围结束 [默认 63355]: " input_max < /dev/tty 2>/dev/null
+read -t 15 -p "请输入带宽监控结束端口 [默认 63355 (15秒跳过)]: " input_max
 echo ""
 PORT_MAX=${input_max:-63355}
 
@@ -122,11 +122,11 @@ for port in \$PORTS; do
 
   in_bytes=\$(iptables -L PORT_MONITOR_IN -vnx | awk -v p="dpt:\$port" '\$0 ~ p {print \$2}')
   out_bytes=\$(iptables -L PORT_MONITOR_OUT -vnx | awk -v p="spt:\$port" '\$0 ~ p {print \$2}')
-  
+
   # === 提取别名，拼接为 [别名-端口] 格式 ===
   ALIAS_NAME=\$(awk -v p="\$port" '\$1==p {sub(/\\r\$/,"",\$2); print \$2}' /opt/scripts/user_map.txt 2>/dev/null)
   USER_NAME="\${ALIAS_NAME:-未分配}-\$port"
-  
+
   echo "port_traffic_in_bytes{port=\"\$port\",user=\"\$USER_NAME\"} \${in_bytes:-0}" >> "\$TMP"
   echo "port_traffic_out_bytes{port=\"\$port\",user=\"\$USER_NAME\"} \${out_bytes:-0}" >> "\$TMP"
 done
