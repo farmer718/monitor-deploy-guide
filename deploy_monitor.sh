@@ -23,7 +23,7 @@ read -t 15 -p "请输入带宽监控起始端口 [默认 10000 (15秒跳过)]: "
 echo ""
 PORT_MIN=${input_min:-10000}
 
-read -t 15 -p "请输入带宽监控结束端口 [默认 63355 (15秒跳过)]: " input_max
+read -t 15 -p "请输入带宽监控结束端口 [默认 25000 (15秒跳过)]: " input_max
 echo ""
 PORT_MAX=${input_max:-63355}
 
