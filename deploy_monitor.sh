@@ -35,20 +35,37 @@ echo ""
 if [[ "$confirm" =~ ^[nN] ]]; then echo "已取消"; exit 0; fi
 
 # ========== 0. 检查依赖 ==========
+echo ">>> 0. 检查依赖并安装"
 if ! command -v iptables &>/dev/null; then
-  echo ">>> 0. 安装 iptables"
+  echo "  - 安装 iptables"
   apt install -y iptables 2>/dev/null || yum install -y iptables 2>/dev/null
+fi
+
+# 【新增】检查并安装 cron 定时任务组件
+if ! command -v crontab &>/dev/null; then
+  echo "  - 安装 cron"
+  apt install -y cron 2>/dev/null || yum install -y cronie 2>/dev/null
+  # 顺手把 cron 服务跑起来
+  systemctl enable --now cron 2>/dev/null || systemctl enable --now crond 2>/dev/null
 fi
 
 # ========== 1. 安装 node_exporter ==========
 echo ">>> 1. 安装 node_exporter"
+# 【新增】先停止运行中的服务，解除文件占用
+systemctl stop node_exporter 2>/dev/null 
+
 cd /tmp
 FILENAME="node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz"
 if [ ! -f "$FILENAME" ]; then
-  if command -v wget &>/dev/null; then wget -q "$DOWNLOAD_URL" -O "$FILENAME"; else curl -Ls "$DOWNLOAD_URL" -o "$FILENAME"; fi
+  if command -v wget &>/dev/null; then 
+    wget -q "$DOWNLOAD_URL" -O "$FILENAME"
+  else 
+    curl -Ls "$DOWNLOAD_URL" -o "$FILENAME"
+  fi
 fi
 tar xzf "$FILENAME"
-cp node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
+# 【修改】加个 -f 强制覆盖，解决 "Text file busy" 报错
+cp -f node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter /usr/local/bin/
 
 # ========== 2. 创建 systemd 服务 ==========
 echo ">>> 2. 创建 systemd 服务"
@@ -88,8 +105,9 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now node_exporter
-
+systemctl enable node_exporter
+# 【修改】确保每次跑脚本都会强行重启加载最新配置，而不是保持原样
+systemctl restart node_exporter
 # ========== 3. 部署采集脚本与映射表 ==========
 echo ">>> 3. 部署采集脚本"
 mkdir -p /opt/scripts
