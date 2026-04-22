@@ -25,7 +25,7 @@ PORT_MIN=${input_min:-10000}
 
 read -t 15 -p "请输入带宽监控结束端口 [默认 25000 (15秒跳过)]: " input_max
 echo ""
-PORT_MAX=${input_max:-63355}
+PORT_MAX=${input_max:-25000}
 
 echo "确认配置："
 echo "  node_exporter 端口: ${NODE_EXPORTER_PORT}"
